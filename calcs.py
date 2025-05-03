@@ -1,3 +1,5 @@
+# calcs.py
+
 import math
 import requests
 import io
@@ -115,61 +117,72 @@ def fallback_box(lat, lng, meters=20):
 
 
 def measure_and_annotate(lat, lng, zoom=ZOOM, size=(IMG_W, IMG_H)):
-    # 1) fetch
+    # 1) fetch satellite image
     sat = build_map(lat, lng, zoom, size)
-    # 2) footprint
+    # 2) get footprint
     fp = fetch_mapbox_building(lat, lng) or fetch_osm_building(lat, lng)
+
     overlay = sat.convert("RGBA")
     draw    = ImageDraw.Draw(overlay, "RGBA")
     font    = ImageFont.load_default()
 
     length_m = width_m = None
+
     if fp and len(fp) >= 4:
+        # project footprint points
         pts = np.array([
-            latlng_to_image_px(v["lat"], v["lon"], (lat,lng), zoom, size)
+            latlng_to_image_px(v["lat"], v["lon"], (lat, lng), zoom, size)
             for v in fp
         ], dtype=np.float32)
-        poly = [(int(x),int(y)) for x,y in pts]
+        poly = [(int(x), int(y)) for x, y in pts]
         draw.polygon(poly, outline="red", width=2)
 
+        # minimum-area rectangle
         rect = cv2.minAreaRect(pts)
         box  = cv2.boxPoints(rect).astype(int)
-        e1, e2 = (tuple(box[0]),tuple(box[1])), (tuple(box[1]),tuple(box[2]))
+        e1, e2 = (tuple(box[0]), tuple(box[1])), (tuple(box[1]), tuple(box[2]))
 
-        # draw lines
+        # draw measurement lines
         draw.line(e1, fill="blue", width=4)
         draw.line(e2, fill="blue", width=4)
 
-        # measure
+        # compute distances (in meters)
         def m(e):
             (x1,y1),(x2,y2) = e
-            la1,lo1 = image_px_to_latlng(x1,y1,(lat,lng),zoom,size)
-            la2,lo2 = image_px_to_latlng(x2,y2,(lat,lng),zoom,size)
-            return haversine(la1,lo1,la2,lo2)
+            la1,lo1 = image_px_to_latlng(x1, y1, (lat, lng), zoom, size)
+            la2,lo2 = image_px_to_latlng(x2, y2, (lat, lng), zoom, size)
+            return haversine(la1, lo1, la2, lo2)
 
         length_m, width_m = m(e1), m(e2)
 
-        # annotate
-        def an(e,txt,off=12):
-            (x1,y1),(x2,y2) = e
-            mx,my = (x1+x2)/2,(y1+y2)/2
-            dx,dy = x2-x1,y2-y1
-            L = math.hypot(dx,dy)
-            nx,ny = -dy/L, dx/L
-            tx,ty = int(mx+nx*off), int(my+ny*off)
-            x0,y0,x1b,y1b = draw.textbbox((0,0), txt, font=font)
-            tw,th = x1b-x0, y1b-y0
-            draw.rectangle([(tx-tw//2-2,ty-th//2-2),(tx+tw//2+2,ty+th//2+2)],
-                           fill=(0,0,0,160))
-            draw.text((tx-tw//2,ty-th//2), txt, fill="white", font=font)
+        # convert to feet
+        length_ft = length_m * 3.28084
+        width_ft  = width_m  * 3.28084
 
-        an(e1, f"{length_m:.1f} m")
-        an(e2, f"{width_m :.1f} m")
+        # annotate on-image in feet
+        def an(e, text, off=12):
+            (x1,y1),(x2,y2) = e
+            mx, my = (x1+x2)/2, (y1+y2)/2
+            dx, dy = x2-x1, y2-y1
+            L = math.hypot(dx, dy)
+            nx, ny = -dy/L, dx/L
+            tx, ty = int(mx + nx*off), int(my + ny*off)
+            x0,y0,x1b,y1b = draw.textbbox((0,0), text, font=font)
+            tw, th = x1b-x0, y1b-y0
+            draw.rectangle(
+                [(tx - tw//2 - 2, ty - th//2 - 2), (tx + tw//2 + 2, ty + th//2 + 2)],
+                fill=(0, 0, 0, 160)
+            )
+            draw.text((tx - tw//2, ty - th//2), text, fill="white", font=font)
+
+        an(e1, f"{length_ft:.0f} ft")
+        an(e2, f"{width_ft:.0f} ft")
 
     else:
+        # fallback bounding box
         box_geo = fallback_box(lat, lng)
-        pxs = [latlng_to_image_px(a,b,(lat,lng),zoom,size) for a,b in box_geo]
-        poly = [(int(x),int(y)) for x,y in pxs]
+        pxs = [latlng_to_image_px(a, b, (lat, lng), zoom, size) for a, b in box_geo]
+        poly = [(int(x), int(y)) for x, y in pxs]
         draw.polygon(poly, outline="red", width=2)
 
     return length_m, width_m, overlay
