@@ -5,10 +5,11 @@ from PIL import Image, ImageDraw, ImageFont
 from urllib.parse import urlencode
 import numpy as np
 import cv2
-
+import os 
+load_dotenv()
 # API Keys
-GOOGLE_API_KEY = "AIzaSyDSgL71XaWTeDuDgdLHBeP_HRYVYXLnbdo"
-MAPBOX_TOKEN   = "pk.eyJ1IjoiaHVzc2FpbjEyMzQ1IiwiYSI6ImNtOXR3ZmNsaDAzYm4ycXIyODFmazZtMWwifQ.HGtNa3Hr4_Bkg0IQXzBrdQ"
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+MAPBOX_TOKEN   = os.getenv("MAPBOX_TOKEN")
 
 # Settings
 ZOOM    = 20
